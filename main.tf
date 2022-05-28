@@ -45,7 +45,7 @@ resource "aws_security_group" "elb" {
 
 # Create a Launch Configuration
 resource "aws_launch_configuration" "example" {
-  image_id		    = "ami-0df5d323602591608"
+  image_id		    = "ami-0d058fe428540cd89"
   instance_type   = "t2.micro"
   security_groups = ["${aws_security_group.instance.id}"]
   
@@ -68,8 +68,9 @@ resource "aws_autoscaling_group" "example" {
   load_balancers       = ["${aws_elb.example.name}"]
   health_check_type    = "ELB"
   
-  min_size = 2
-  max_size = 10
+  min_size             = 2
+  max_size             = 10
+  desired_capacity     = 2
   
   tag {
     key                 = "Name"
@@ -77,6 +78,56 @@ resource "aws_autoscaling_group" "example" {
     propagate_at_launch = true
   }
 }
+
+resource "aws_autoscaling_policy" "scale_up" {
+  name                   = "asg_policy_scale_up" 
+  autoscaling_group_name = aws_autoscaling_group.example.name
+  adjustment_type        = "ChangeInCapacity"
+  scaling_adjustment     = 2
+  cooldown               = 120 
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_up" {
+  alarm_description   = "Monitors CPU utilization for Terramino ASG"
+  alarm_actions       = [aws_autoscaling_policy.scale_up.arn]
+  alarm_name          = "alarm_cpu_up"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  namespace           = "AWS/EC2"
+  metric_name         = "CPUUtilization"
+  threshold           = "30"
+  evaluation_periods  = "2"
+  period              = "120"
+  statistic           = "Average"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.example.name
+  }
+}
+
+resource "aws_autoscaling_policy" "scale_down" {
+  name                   = "asg_policy_scale_down" 
+  autoscaling_group_name = aws_autoscaling_group.example.name
+  adjustment_type        = "ChangeInCapacity"
+  scaling_adjustment     = -1
+  cooldown               = 120 
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_down" {
+  alarm_description   = "Monitors CPU utilization for Terramino ASG"
+  alarm_actions       = [aws_autoscaling_policy.scale_down.arn]
+  alarm_name          = "alarm_cpu_down"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  namespace           = "AWS/EC2"
+  metric_name         = "CPUUtilization"
+  threshold           = "30"
+  evaluation_periods  = "2"
+  period              = "120"
+  statistic           = "Average"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.example.name
+  }
+} 
 
 # Create an ELB
 resource "aws_elb" "example" {
